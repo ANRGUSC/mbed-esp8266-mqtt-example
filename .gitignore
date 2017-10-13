@@ -34,3 +34,5 @@ BUILD/
 mbed-os/
 esp8266-driver/
 .tags*
+
+*.pyc
