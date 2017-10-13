@@ -32,4 +32,5 @@ BUILD/
 *.su
 
 mbed-os/
+esp8266-driver/
 .tags*
