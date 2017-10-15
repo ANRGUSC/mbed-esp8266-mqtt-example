@@ -28,6 +28,7 @@ filename = glob.glob('./BUILD/LPC1768/GCC_ARM/*.bin')
 flash.flashBinary(filename[0])
 print("pc: 0x%X" % target.readCoreRegister("pc"))
 
+target.resume()
 target.reset()
 
 cmd = "./pyterm -b 115200 -p %s" % serial_ports(board.unique_id)
