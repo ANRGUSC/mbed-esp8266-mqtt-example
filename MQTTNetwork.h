@@ -14,6 +14,7 @@ public:
     }
 
     int read(unsigned char* buffer, int len, int timeout) {
+        socket->set_timeout(timeout);
         return socket->recv(buffer, len);
     }
 

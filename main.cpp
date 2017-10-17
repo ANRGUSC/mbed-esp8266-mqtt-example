@@ -59,8 +59,9 @@
 /* connect this pin to both the CH_PD & RST pins on the ESP8266 just in case */
 #define WIFI_HW_RESET_PIN       p26
 
-#define WIFI_SSID    "IOT-DEMO"
-#define WIFI_PASSWD  "i0twithARMandUSC"
+#define WIFI_SSID           "IOT-DEMO"
+#define WIFI_PASSWD         "i0twithARMandUSC"
+#define MQTT_BROKER_IPADDR  "raspberrypi"
 
 /* turn on  debug prints */
 #define ESP8266_DEBUG           true
@@ -103,72 +104,65 @@ int main()
     }
 
     printf("Success!\n");
-    printf("IP addr: %s\n", wifi->get_ip_address());
+    const char *ip_addr = wifi->get_ip_address();
+    printf("IP addr: %s\n", ip_addr);
 
     MQTTNetwork mqttNetwork(wifi);
 
-    float version = 0.6;
-    char* topic = "mbed-sample";
+    char* topic = "mbed-wifi-example";
 
     MQTT::Client<MQTTNetwork, Countdown> client(mqttNetwork);
 
-    const char* hostname = "m2m.eclipse.org";
+    const char* hostname = MQTT_BROKER_IPADDR; 
     int port = 1883;
     printf("Connecting to %s:%d\r\n", hostname, port);
-    int rc = mqttNetwork.connect(hostname, port);
-    if (rc != 0)
-        printf("rc from TCP connect is %d\r\n", rc);
+    int retval = mqttNetwork.connect(hostname, port);
+    if (retval != 0)
+        printf("TCP connect returned %d\r\n", retval);
 
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
     data.MQTTVersion = 3;
-    data.clientID.cstring = "mbed-sample";
-    data.username.cstring = "testuser";
-    data.password.cstring = "testpassword";
-    if ((rc = client.connect(data)) != 0)
-        printf("rc from MQTT connect is %d\r\n", rc);
+    data.clientID.cstring = ip_addr; //use ip_addr for unique client name
+    if ((retval = client.connect(data)) != 0)
+        printf("connect returned %d\r\n", retval);
 
-    if ((rc = client.subscribe(topic, MQTT::QOS1, messageArrived)) != 0)
-        printf("rc from MQTT subscribe is %d\r\n", rc);
+    /* define MQTTCLIENT_QOS2 as 1 to enable QOS2 (see MQTTClient.h) */
+    if ((retval = client.subscribe(topic, MQTT::QOS0, messageArrived)) != 0)
+        printf("MQTT subscribe returned %d\r\n", retval);
 
     MQTT::Message message;
 
-    // QoS 0
     char buf[100];
-    sprintf(buf, "Hello World!  QoS 0 message from app version %f\r\n", version);
+    sprintf(buf, "Hello FIE!\r\n");
     message.qos = MQTT::QOS0;
     message.retained = false;
     message.dup = false;
     message.payload = (void*)buf;
-    message.payloadlen = strlen(buf)+1;
-    rc = client.publish(topic, message);
-    while (arrivedcount < 1)
-        client.yield(100);
+    message.payloadlen = strlen(buf) + 1;
+    retval = client.publish(topic, message);
 
-    // QoS 1
-    sprintf(buf, "Hello World!  QoS 1 message from app version %f\r\n", version);
-    message.qos = MQTT::QOS1;
-    message.payloadlen = strlen(buf)+1;
-    rc = client.publish(topic, message);
-    while (arrivedcount < 2)
-        client.yield(100);
+
+    sprintf(buf, "Hello FIE! msg 2\r\n");
+    message.qos = MQTT::QOS0;
+    message.payloadlen = strlen(buf) + 1;
+    retval = client.publish(topic, message);
+
 
     // QoS 2
-    sprintf(buf, "Hello World!  QoS 1 message from app version %f\r\n", version);
-    message.qos = MQTT::QOS1;
-    message.payloadlen = strlen(buf)+1;
-    rc = client.publish(topic, message);
-    while (arrivedcount < 3)
-        client.yield(100);
+    sprintf(buf, "Hello FIE! msg 3\r\n");
+    message.qos = MQTT::QOS0;
+    message.payloadlen = strlen(buf) + 1;
+    retval = client.publish(topic, message);
 
-    if ((rc = client.unsubscribe(topic)) != 0)
-        printf("rc from unsubscribe was %d\r\n", rc);
+    if ((retval = client.unsubscribe(topic)) != 0)
+        printf("unsubscribe returned %d\r\n", retval);
 
-    if ((rc = client.disconnect()) != 0)
-        printf("rc from disconnect was %d\r\n", rc);
+    if ((retval = client.disconnect()) != 0)
+        printf("disconnect returned %d\r\n", retval);
 
     mqttNetwork.disconnect();
 
-    printf("Version %.2f: finish %d msgs\r\n", version, arrivedcount);
+    printf("finished %d msgs\r\n", arrivedcount);
 
     wifi->disconnect();
     printf("\nDone!\n");
