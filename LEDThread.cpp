@@ -45,6 +45,7 @@
 
 #include "LEDThread.h"
 #include "MQTTmbed.h"
+#include "MQTTNetwork.h"
 
 #include "MQTTClient.h"
 
@@ -106,7 +107,7 @@ void LEDThread(void *args)
                     led2 = 0;
                     break;
                 case LED_BLINK_FAST:
-                    printf("LEDThread: blinking LED2 fast for two seconds...\n");
+                    printf("LEDThread: blinking LED2 fast for one second...\n");
                     for(int i = 0; i < 10; i++)
                     {
                         led2 = !led2;

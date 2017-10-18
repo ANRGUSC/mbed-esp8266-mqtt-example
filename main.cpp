@@ -49,6 +49,7 @@
 #include "mbed.h"
 #include "easy-connect.h"
 #include "MQTTmbed.h"
+#include "MQTTNetwork.h"
 #include "MQTTClient.h"
 #include "MailMsg.h"
 #include "LEDThread.h"

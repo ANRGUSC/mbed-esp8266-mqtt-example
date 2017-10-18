@@ -45,6 +45,7 @@
 
 #include "PrintThread.h"
 #include "MQTTmbed.h"
+#include "MQTTNetwork.h"
 #include "mbed.h"
 
 Mail<MailMsg, PRINTTHREAD_MAILBOX_SIZE> PrintThreadMailbox;
