@@ -39,18 +39,22 @@
  * @file       main.cpp
  * @brief      Example using an ESP8266 to pub/sub using MQTT on MBED OS.
  * 
- *             This example is specifically built for
+ *             This example is specifically built for the FIE workshop.
  *
- * @author     Jason Tran <jason.tran@usc.edu>
+ * @author     Jason Tran <jasontra@usc.edu>
  * @author     Bhaskar Krishnachari <bkrishna@usc.edu>
  * 
  */
 
 #include "mbed.h"
 #include "easy-connect.h"
-#include "MQTTNetwork.h"
 #include "MQTTmbed.h"
 #include "MQTTClient.h"
+#include "MailMsg.h"
+#include "LEDThread.h"
+#include "PrintThread.h"
+
+extern "C" void mbed_reset();
 
 /* UART TX/RX Pin Settings */ 
 #define MBED_WIFI_TX_PIN        p28
@@ -59,40 +63,83 @@
 /* connect this pin to both the CH_PD & RST pins on the ESP8266 just in case */
 #define WIFI_HW_RESET_PIN       p26
 
-#define WIFI_SSID           "IOT-DEMO"
-#define WIFI_PASSWD         "i0twithARMandUSC"
-#define MQTT_BROKER_IPADDR  "raspberrypi"
+#define MQTT_BROKER_IPADDR      "192.168.29.91"
+#define MQTT_BROKER_PORT        1883
 
-/* turn on  debug prints */
-#define ESP8266_DEBUG           true
+/* turn on easy-connect debug prints */
 #define EASY_CONNECT_LOGGING    true
 
-// ESP8266Interface wifi(MBED_WIFI_TX_PIN, MBED_WIFI_RX_PIN, ESP8266_DEBUG);
-DigitalOut wifi_hw_reset(WIFI_HW_RESET_PIN);
+DigitalOut wifiHwResetPin(WIFI_HW_RESET_PIN);
+InterruptIn pushbutton(p8);
 
-int arrivedcount = 0;
+/* MQTTClient and TCPSocket (underneath MQTTNetwork) may not be thread safe. 
+ * Lock this global mutex before any publishes. 
+ */
+Mutex mqttMtx;
 
+void pushbuttonCallback() {
+    /* send mail to LED thread */
+    printf("button pushed\n");
+    MailMsg *msg;
+
+    msg = getLEDThreadMailbox()->alloc();
+    msg->content[0] = FWD_TO_LED_THR;
+    msg->content[1] = LED_PUBLISH_BLINK_FAST;
+    msg->length = 2;
+    getLEDThreadMailbox()->put(msg);
+}
+
+/* Callback for any received MQTT messages */
 void messageArrived(MQTT::MessageData& md)
 {
     MQTT::Message &message = md.message;
-    printf("Message arrived: qos %d, retained %d, dup %d, packetid %d\r\n", message.qos, message.retained, message.dup, message.id);
-    printf("Payload %.*s\r\n", message.payloadlen, (char*)message.payload);
-    ++arrivedcount;
+    MailMsg *msg;
+
+    /* our messaging standard says the first byte denotes which thread to fwd to */
+    char fwdTarget = ((char *)message.payload)[0];
+
+    /* Ship (or "dispatch") entire message via mail to threads since the 
+       reference to messages will disappear soon after this callback returns */
+    switch(fwdTarget)
+    {
+        case FWD_TO_PRINT_THR:
+            /* put in print thread's mailbox */
+            printf("fwding to print\n");
+            msg = getPrintThreadMailbox()->alloc();
+            memcpy(msg->content, message.payload, message.payloadlen);
+            msg->length = message.payloadlen;
+            getPrintThreadMailbox()->put(msg);
+            break;
+        case FWD_TO_LED_THR:
+            /* put in led thread's mailbox */
+            printf("fwding to led\n");
+            msg = getLEDThreadMailbox()->alloc();
+            memcpy(msg->content, message.payload, message.payloadlen);
+            msg->length = message.payloadlen;
+            getLEDThreadMailbox()->put(msg);
+            break;
+        default:
+            /* do nothing */
+            printf("Unknown MQTT message\n");
+            break;
+    }
 }
 
 int main()
 {
-    wait(1); //delay startup 
+    /* attach callback to pushbutton interrupt */
+    pushbutton.mode(PullUp);
+    pushbutton.rise(&pushbuttonCallback);
 
-    /* Hardware reset the ESP8266 */
+    wait(1); //delay startup 
     printf("Resetting ESP8266 Hardware...\n");
-    wifi_hw_reset = 0;
+    wifiHwResetPin = 0;
     wait(1);
-    wifi_hw_reset = 1;
+    wifiHwResetPin = 1;
 
     printf("Starting MQTT example with an ESP8266 wifi device using Mbed OS.\n");
 
-    printf("Attempting to connect to demo router...\n");
+    printf("Attempting to connect to access point...\n");
 
     /* wifi settings in mbed_app.json */
     NetworkInterface* wifi = easy_connect(EASY_CONNECT_LOGGING);
@@ -103,69 +150,56 @@ int main()
         return -1;
     }
 
-    printf("Success!\n");
-    const char *ip_addr = wifi->get_ip_address();
-    printf("IP addr: %s\n", ip_addr);
+    const char *ipAddr = wifi->get_ip_address();
+    printf("Success! My IP addr: %s\n", ipAddr);
+    char clientID[30];
+    /* use ip addr as unique client ID */
+    memcpy(clientID, ipAddr, strlen(ipAddr) + 1);
 
     MQTTNetwork mqttNetwork(wifi);
-
-    char* topic = "mbed-wifi-example";
-
     MQTT::Client<MQTTNetwork, Countdown> client(mqttNetwork);
 
-    const char* hostname = MQTT_BROKER_IPADDR; 
-    int port = 1883;
-    printf("Connecting to %s:%d\r\n", hostname, port);
-    int retval = mqttNetwork.connect(hostname, port);
+    printf("Connecting to %s:%d\n", MQTT_BROKER_IPADDR, MQTT_BROKER_PORT);
+    int retval = mqttNetwork.connect(MQTT_BROKER_IPADDR, MQTT_BROKER_PORT);
     if (retval != 0)
-        printf("TCP connect returned %d\r\n", retval);
+        printf("TCP connect returned %d\n", retval);
 
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
     data.MQTTVersion = 3;
-    data.clientID.cstring = ip_addr; //use ip_addr for unique client name
+    // data.keepAliveInterval = 60; //MQTTPacket_connectData_initializer sets this to 60
+    data.clientID.cstring = clientID; 
     if ((retval = client.connect(data)) != 0)
-        printf("connect returned %d\r\n", retval);
+        printf("connect returned %d\n", retval);
 
     /* define MQTTCLIENT_QOS2 as 1 to enable QOS2 (see MQTTClient.h) */
+    /* Setup the callback to handle messages that arrive */
+#if MASTER_NODE
+    char *topic = "mbed-wifi-master";
+#else 
+    char *topic = "mbed-wifi-example";
+#endif
     if ((retval = client.subscribe(topic, MQTT::QOS0, messageArrived)) != 0)
-        printf("MQTT subscribe returned %d\r\n", retval);
+        printf("MQTT subscribe returned %d\n", retval);
 
-    MQTT::Message message;
-
-    char buf[100];
-    sprintf(buf, "Hello FIE!\r\n");
-    message.qos = MQTT::QOS0;
-    message.retained = false;
-    message.dup = false;
-    message.payload = (void*)buf;
-    message.payloadlen = strlen(buf) + 1;
-    retval = client.publish(topic, message);
+    /* launch threads */
+    Thread ledThr;
+    Thread printThr;
+    ledThr.start(callback(LEDThread, (void *)&client));
+    printThr.start(printThread);
 
 
-    sprintf(buf, "Hello FIE! msg 2\r\n");
-    message.qos = MQTT::QOS0;
-    message.payloadlen = strlen(buf) + 1;
-    retval = client.publish(topic, message);
+    /* The main thread will now run in the background to keep the MQTT/TCP 
+     connection alive */
+    while(1) {
+        Thread::wait(1000);
+        printf("main: yielding...\n", client.isConnected());
 
+        if(!client.isConnected())
+            mbed_reset(); //software reset
 
-    // QoS 2
-    sprintf(buf, "Hello FIE! msg 3\r\n");
-    message.qos = MQTT::QOS0;
-    message.payloadlen = strlen(buf) + 1;
-    retval = client.publish(topic, message);
-
-    if ((retval = client.unsubscribe(topic)) != 0)
-        printf("unsubscribe returned %d\r\n", retval);
-
-    if ((retval = client.disconnect()) != 0)
-        printf("disconnect returned %d\r\n", retval);
-
-    mqttNetwork.disconnect();
-
-    printf("finished %d msgs\r\n", arrivedcount);
-
-    wifi->disconnect();
-    printf("\nDone!\n");
+        /* yield() needs to be called at least once per keepAliveInterval */
+        client.yield(1000);
+    }
 
     return 0;
 }

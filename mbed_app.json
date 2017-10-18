@@ -26,7 +26,8 @@
         "*": {
             "target.features_add": ["NANOSTACK", "LOWPAN_ROUTER", "COMMON_PAL"],
             "mbed-mesh-api.6lowpan-nd-channel-page": 0,
-            "mbed-mesh-api.6lowpan-nd-channel": 12
+            "mbed-mesh-api.6lowpan-nd-channel": 12,
+            "target.macros_add": ["MASTER_NODE=0"]
         },
         "LPC1768": {
             "platform.stdio-baud-rate": 115200,
