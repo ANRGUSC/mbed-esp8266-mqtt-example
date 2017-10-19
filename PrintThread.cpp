@@ -75,6 +75,8 @@ void printThread()
                     printf("printThread: invalid message\n");
                     break;
             }
+
+            PrintThreadMailbox.free(msg);
         }
     } /* while */
 

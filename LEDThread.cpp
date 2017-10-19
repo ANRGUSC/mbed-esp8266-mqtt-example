@@ -119,6 +119,8 @@ void LEDThread(void *args)
                     printf("LEDThread: invalid message\n");
                     break;
             }            
+
+            LEDMailbox.free(msg);
         }
     } /* while */
 
