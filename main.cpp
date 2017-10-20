@@ -57,13 +57,10 @@
 
 extern "C" void mbed_reset();
 
-/* UART TX/RX Pin Settings */ 
-#define MBED_WIFI_TX_PIN        p28
-#define MBED_WIFI_RX_PIN        p27
-
-/* connect this pin to both the CH_PD & RST pins on the ESP8266 just in case */
+/* connect this pin to both the CH_PD (aka EN) & RST pins on the ESP8266 just in case */
 #define WIFI_HW_RESET_PIN       p26
 
+/* See if you can try using a hostname here */
 #define MQTT_BROKER_IPADDR      "192.168.29.91"
 #define MQTT_BROKER_PORT        1883
 
@@ -74,16 +71,20 @@ DigitalOut wifiHwResetPin(WIFI_HW_RESET_PIN);
 InterruptIn pushbutton(p8);
 
 /* MQTTClient and TCPSocket (underneath MQTTNetwork) may not be thread safe. 
- * Lock this global mutex before any publishes. 
+ * Lock this global mutex before any calls to publish(). 
  */
 Mutex mqttMtx;
 
 void pushbuttonCallback() {
-    /* send mail to LED thread */
     printf("button pushed\n");
     MailMsg *msg;
 
+    /* send to LED thread which takes care of publishing blink fast commands */
     msg = getLEDThreadMailbox()->alloc();
+    if (!msg) {
+        printf("LEDThreadMailbox full!\n");
+        return;
+    }
     msg->content[0] = FWD_TO_LED_THR;
     msg->content[1] = LED_PUBLISH_BLINK_FAST;
     msg->length = 2;
@@ -104,17 +105,23 @@ void messageArrived(MQTT::MessageData& md)
     switch(fwdTarget)
     {
         case FWD_TO_PRINT_THR:
-            /* put in print thread's mailbox */
-            printf("fwding to print\n");
+            printf("fwding to print thread\n");
             msg = getPrintThreadMailbox()->alloc();
+            if (!msg) {
+                printf("print thread mailbox full!\n");
+                break;
+            }
             memcpy(msg->content, message.payload, message.payloadlen);
             msg->length = message.payloadlen;
             getPrintThreadMailbox()->put(msg);
             break;
         case FWD_TO_LED_THR:
-            /* put in led thread's mailbox */
-            printf("fwding to led\n");
+            printf("fwding to led thread\n");
             msg = getLEDThreadMailbox()->alloc();
+            if (!msg) {
+                printf("led thread mailbox full!\n");
+                break;
+            }
             memcpy(msg->content, message.payload, message.payloadlen);
             msg->length = message.payloadlen;
             getLEDThreadMailbox()->put(msg);
@@ -139,10 +146,10 @@ int main()
     wifiHwResetPin = 1;
 
     printf("Starting MQTT example with an ESP8266 wifi device using Mbed OS.\n");
-
     printf("Attempting to connect to access point...\n");
 
-    /* wifi settings in mbed_app.json */
+    /* wifi ssid/pw and wifi interface settings are set in mbed_app.json. 
+     * NetworkInterface is mbed-OS's abstraction of any network interface */
     NetworkInterface* wifi = easy_connect(EASY_CONNECT_LOGGING);
     if (!wifi) {
         printf("Connection error! Your ESP8266 may not be responding.\n");
@@ -155,8 +162,9 @@ int main()
     printf("Success! My IP addr: %s\n", ipAddr);
     char clientID[30];
     /* use ip addr as unique client ID */
-    memcpy(clientID, ipAddr, strlen(ipAddr) + 1);
+    strcpy(clientID, ipAddr);
 
+    /* wrapper for (NetworkInterface *wifi) to adapt to MQTTClient.h */
     MQTTNetwork mqttNetwork(wifi);
     MQTT::Client<MQTTNetwork, Countdown> client(mqttNetwork);
 
@@ -166,37 +174,42 @@ int main()
         printf("TCP connect returned %d\n", retval);
 
     MQTTPacket_connectData data = MQTTPacket_connectData_initializer;
-    data.MQTTVersion = 3;
+    data.MQTTVersion = 3;   //support only available up to ver. 3
     // data.keepAliveInterval = 60; //MQTTPacket_connectData_initializer sets this to 60
     data.clientID.cstring = clientID; 
     if ((retval = client.connect(data)) != 0)
         printf("connect returned %d\n", retval);
 
-    /* define MQTTCLIENT_QOS2 as 1 to enable QOS2 (see MQTTClient.h) */
-    /* Setup the callback to handle messages that arrive */
 #if MASTER_NODE
     char *topic = "mbed-wifi-master";
 #else 
     char *topic = "mbed-wifi-example";
 #endif
+
+    /* define MQTTCLIENT_QOS2 as 1 to enable QOS2 (see MQTTClient.h) */
+    /* Setup the callback to handle messages that arrive */
     if ((retval = client.subscribe(topic, MQTT::QOS0, messageArrived)) != 0)
         printf("MQTT subscribe returned %d\n", retval);
 
     /* launch threads */
     Thread ledThr;
     Thread printThr;
+
+    /* pass in pointer to client so led thread can client.publish() messages */
     ledThr.start(callback(LEDThread, (void *)&client));
     printThr.start(printThread);
 
 
     /* The main thread will now run in the background to keep the MQTT/TCP 
-     connection alive */
+     connection alive. MQTTClient is not an asynchronous library. Paho does
+     have MQTTAsync, but some effort is needed to adapt mbed OS libraries to
+     be used by the MQTTAsync library. */
     while(1) {
         Thread::wait(1000);
         printf("main: yielding...\n", client.isConnected());
 
         if(!client.isConnected())
-            mbed_reset(); //software reset
+            mbed_reset(); //connection lost! software reset
 
         /* yield() needs to be called at least once per keepAliveInterval */
         client.yield(1000);

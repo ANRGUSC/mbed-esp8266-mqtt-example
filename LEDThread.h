@@ -52,7 +52,9 @@
 #define LEDTHREAD_MAILBOX_SIZE  32
 
 /**
- * @brief      Main LED thread function
+ * @brief      Main LED thread function.
+ *
+ * @param      args  Pointer to the MQTT client so the LED thread can .publish().
  */
 void LEDThread(void *args);
 

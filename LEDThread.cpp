@@ -94,7 +94,7 @@ void LEDThread(void *args)
                     message.retained = false;
                     message.dup = false;
                     message.payload = (void*)pub_buf;
-                    message.payloadlen = 2 + 1;
+                    message.payloadlen = 2 + 1; //+1 for null char
                     /* Lock the global MQTT mutex before publishing */
                     mqttMtx.lock();
                     client->publish(topic, message);

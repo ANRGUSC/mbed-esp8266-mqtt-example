@@ -1,11 +1,10 @@
-
 #ifndef _MQTTNETWORK_H_
 #define _MQTTNETWORK_H_
 
 #include "NetworkInterface.h"
 
 /**
- * Lock this global mutex before publishing
+ * Lock this global mutex before any publish() calls.
  */
 extern Mutex mqttMtx;
 
