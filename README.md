@@ -1,6 +1,6 @@
 mbed-esp8266-mqtt-example
 
-##Summary
+## Summary
 
 The main purpose for this repository is to show an educational example of a
 multi-threaded, (mostly) event-based MQTT application built on top of mbed OS 
@@ -11,14 +11,14 @@ powerpoint slides hosted here. Please note we will not be updating the slides
 through time. Please refer to the FIE_WORKSHOP release tag to see the original
 code we used in the workshop.
 
-##Preface
+## Preface
 
 This repository is intended for educational purposes. The code here is heavily
 commented, and we absolutely welcome any recommendations to improve the code or 
 documentation. Please communicate to us via an issue. Pull requests are welcome!
 
 
-##Quick Start (to run this example out of the box)
+## Quick Start (to run this example out of the box)
 
 Materials Needed:
 
@@ -32,7 +32,7 @@ Materials Needed:
 publish a LED blink command to all slave nodes. The buttons on the slave nodes
 publishes the command to the master.
 
-##Motivation
+## Motivation
 
 1) While mbed OS is well documented with many examples (including examples of
 using MQTTClient), there is a lack of more complex example applications to 
@@ -53,14 +53,14 @@ example carefully and running this code. Then, have the students specifically
 use this example (i.e. the programming pattern provided) to create a richer 
 application of their own.
 
-##Powering the ESP8266-01
+## Powering the ESP8266-01
 
 The ESP8266-01 (or ESP-01) chip takes a 3.3v power supply. Powering it with 5v
 may burn the chip. It needs a clean 3.3v power 
 supply so filtering a 3.3v output from the mbed board with a large capacitor 
 (we've used a 100uF+ capacitor just in case) will help prevent the ESP-01 from random power cycles. Also, even though the GPIO2 pin is not used, we connect it to VCC (high) to try to further prevent power cycles (we are not quite sure if this matters).
 
-##Updating the mbed LPC1768 and ESP8266-01 Firmware
+## Updating the mbed LPC1768 and ESP8266-01 Firmware
 
 LPC1768:
 
