@@ -6,8 +6,8 @@
  * http://anrg.usc.edu/
  *
  * Contributors:
- * Jason A. Tran
- * Bhaskar Krishnamachari
+ * Jason A. Tran <jasontra@usc.edu>
+ * Bhaskar Krishnamachari <bkrishna@usc.edu>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy 
  * of this software and associated documentation files (the "Software"), to deal
@@ -60,7 +60,7 @@ extern "C" void mbed_reset();
 /* connect this pin to both the CH_PD (aka EN) & RST pins on the ESP8266 just in case */
 #define WIFI_HW_RESET_PIN       p26
 
-/* See if you can try using a hostname here */
+/* Using a hostname instead of IP address has been unverified by us */
 #define MQTT_BROKER_IPADDR      "192.168.29.91"
 #define MQTT_BROKER_PORT        1883
 
